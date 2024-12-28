@@ -1,0 +1,332 @@
+#pragma rtGlobals=3
+Function SolveSchrodinger()
+	Make/O/N=500 xWave, psiWave, potentialWave
+	Wave xWave, psiWave, potentialWave
+	
+	Variable dx = 0.02, V0 = 1, psi0
+	SetScale/I x, -5, 5, "x", xWave
+	
+	potentialWave = 0.5 * V0 * x^2
+	
+	psi0 = 1
+	psiWave[0] = psi0
+	psiWave[1] = psi0 * (1 - 0.5 * dx^2 * potentialWave[0])
+	
+	Variable n
+	For(n = 2; n < numpnts(psiWave); n+=1)
+		psiWave[n] = (2 * (1 - 0.5 * dx^2 * potentialWave[n-1]) * psiWave[n-1]) - psiWave[n-2]
+	EndFor
+	
+	Display/N=SchrodingerEq psiWave vs xWave
+	ModifyGraph rgb=(0,0,65535)
+	Label left "ψ(x)"
+	Label bottom "Position (x)"
+End
+
+Function FourierTransform()
+	Make/O/N=1024 timeWave, gaussWave
+	Wave timeWave, gaussWave
+	
+	Variable dt = 0.01
+	SetScale/P x, 0, dt, "time", timeWave
+	SetScale/P x, 0, dt, "time", gaussWave
+	
+	gaussWave = exp(-(x-50)^2/20)
+	
+	Display/N=OriginalWave gaussWave vs timeWave
+	Label left "Amplitude"
+	Label bottom "Time"
+	
+	// Create a separate wave for FFT output
+	Make/O/C/N=(numpnts(gaussWave)) fftWave
+	Wave/C fftWave
+	
+	// Perform FFT with separate source and destination waves
+	FFT/OUT=1/DEST=fftWave gaussWave
+	
+	// Create separate waves for real and imaginary parts
+	Make/O/N=(numpnts(fftWave)) realPart, imagPart, magnitudePart
+	Wave realPart, imagPart, magnitudePart
+	
+	realPart = real(fftWave)
+	imagPart = imag(fftWave)
+	magnitudePart = sqrt(realPart^2 + imagPart^2)
+	
+	Display/N=FFTResults
+	AppendToGraph realPart vs timeWave
+	AppendToGraph imagPart vs timeWave
+	AppendToGraph magnitudePart vs timeWave
+	ModifyGraph rgb(realPart)=(65535,0,0),rgb(imagPart)=(0,65535,0),rgb(magnitudePart)=(0,0,65535)
+	Label left "Amplitude"
+	Label bottom "Time"
+End
+
+Function GaussianFit()
+	Make/O/N=100 fitX, fitY
+	Wave fitX, fitY
+	
+	SetScale/I x, -5, 5, "x", fitX
+	
+	fitY = exp(-(x)^2/2) + gnoise(0.05)
+	
+	Display/N=GaussFit fitY vs fitX
+	ModifyGraph mode=3,marker=19
+	
+	Make/O/D/N=4 W_coef
+	Wave W_coef
+	W_coef = {1,0,1,0}  // Initial guess
+	FuncFit/Q Gauss W_coef fitY /X=fitX /D
+End
+
+Function QuantumHarmonicOscillator()
+	Make/O/N=1000 timeWave, psiReal, psiImag
+	Wave timeWave, psiReal, psiImag
+	
+	Variable dt = 0.01, tmax = 10, omega = 1
+	SetScale/I x, 0, tmax, "time", timeWave
+	
+	Variable x0 = 1
+	psiReal[0] = x0
+	psiImag[0] = 0
+	timeWave[0] = 0
+	
+	Variable n
+	For(n = 1; n < numpnts(timeWave); n+=1)
+		psiReal[n] = psiReal[n-1] - omega * dt * psiImag[n-1]
+		psiImag[n] = psiImag[n-1] + omega * dt * psiReal[n-1]
+		timeWave[n] = n * dt
+	EndFor
+	
+	Display/N=QHO
+	AppendToGraph psiReal vs timeWave
+	AppendToGraph psiImag vs timeWave
+	ModifyGraph rgb(psiReal)=(65535,0,0),rgb(psiImag)=(0,0,65535)
+	Label left "Wave Function"
+	Label bottom "Time"
+End
+
+Function RunAllSimulations()
+	SolveSchrodinger()
+	FourierTransform()
+	GaussianFit()
+	QuantumHarmonicOscillator()
+End
+Window OriginalWave0() : Graph
+	PauseUpdate; Silent 1		// building window...
+	Display /W=(34.8,42.2,430.2,249.8) gaussWave vs timeWave
+	Label left "Amplitude"
+	Label bottom "Time"
+EndMacro
+
+
+
+
+
+
+
+
+
+#pragma rtGlobals=3
+
+// Creates a dynamic wave propagation visualization
+Function WaveAnimation()
+	// Create waves for animation
+	Make/O/N=200 positionWave, waveForm1, waveForm2
+	SetScale/I x, -10, 10, "x", positionWave
+	
+	// Animation variables
+	Variable/G root:phase = 0
+	
+	// Create display
+	Display/N=WaveDemo/K=1 waveForm1 vs positionWave
+	AppendToGraph waveForm2 vs positionWave
+	ModifyGraph rgb(waveForm1)=(65535,0,0), rgb(waveForm2)=(0,0,65535)
+	ModifyGraph mirror=2, minor=1, grid=1
+	Label left "Amplitude"
+	Label bottom "Position"
+	TextBox/C/N=title/F=0/A=MC "Wave Interference Demonstration"
+	
+	// Start animation
+	UpdateWaveforms()
+	CtrlNamedBackground WaveUpdate, proc=UpdateWaveforms, period=15
+	CtrlNamedBackground WaveUpdate, start
+End
+
+Function UpdateWaveforms()
+	NVAR phase = root:phase
+	Wave positionWave, waveForm1, waveForm2
+	
+	// Update wave forms with phase
+	waveForm1 = 0.5*sin(x - phase)
+	waveForm2 = 0.5*sin(x + phase)
+	
+	// Update phase
+	phase += 0.1
+	if(phase > 2*pi)
+		phase = 0
+	endif
+End
+
+// Creates an interactive quantum well visualization
+Function QuantumWellVisualization()
+	// Create waves for potential well and wave functions
+	Make/O/N=300 xWave, potential, psi1, psi2, psi3
+	SetScale/I x, -5, 5, "", xWave
+	
+	// Create infinite potential well
+	potential = (abs(x) > 4) ? 10 : 0
+	
+	// Calculate first three eigenstates
+	psi1 = sqrt(1/4)*sin(pi*(x+4)/8) * exp(-potential/10)
+	psi2 = sqrt(1/4)*sin(2*pi*(x+4)/8) * exp(-potential/10)
+	psi3 = sqrt(1/4)*sin(3*pi*(x+4)/8) * exp(-potential/10)
+	
+	// Create display
+	Display/N=QuantumWell/K=1 potential vs xWave
+	AppendToGraph psi1, psi2, psi3
+	ModifyGraph rgb(potential)=(0,0,0), rgb(psi1)=(65535,0,0)
+	ModifyGraph rgb(psi2)=(0,65535,0), rgb(psi3)=(0,0,65535)
+	ModifyGraph mirror=2, minor=1
+	Label left "Energy/Amplitude"
+	Label bottom "Position"
+	TextBox/C/N=title/F=0/A=MC "Quantum Well Energy States"
+	
+	// Add sliders for interactive control
+	Slider slider0,pos={20,20},size={150,16},proc=SliderProc
+	Slider slider0,limits={0,2,0.1},value=1,vert=0,ticks=20
+End
+
+Function SliderProc(sa) : SliderControl
+	STRUCT WMSliderAction &sa
+	
+	switch(sa.eventCode)
+		case 2: // Mouse up
+			Wave psi1, psi2, psi3
+			Variable scale = sa.curval  // Fixed: Changed from sa.value to sa.curval
+			psi1 *= scale
+			psi2 *= scale
+			psi3 *= scale
+			break
+	endswitch
+	return 0
+End
+
+// Creates a 3D surface plot of electron probability density
+Function ElectronDensityPlot()
+	// Create 2D waves for electron density
+	Make/O/N=(50,50) electronDensity
+	SetScale/I x, -5, 5, "", electronDensity
+	SetScale/I y, -5, 5, "", electronDensity
+	
+	// Calculate electron density for 2p orbital
+	Variable i, j
+	for(i=0; i<50; i+=1)
+		for(j=0; j<50; j+=1)
+			Variable x = DimOffset(electronDensity,0) + i*DimDelta(electronDensity,0)
+			Variable y = DimOffset(electronDensity,1) + j*DimDelta(electronDensity,1)
+			Variable r = sqrt(x^2 + y^2)
+			Variable theta = atan2(y,x)
+			electronDensity[i][j] = (r*exp(-r/2)*cos(theta))^2
+		endfor
+	endfor
+	
+	// Create 3D display
+	Display/N=ElectronDensity/K=1
+	AppendMatrixContour electronDensity
+	ModifyContour electronDensity ctabLines={*,*,Rainbow,0}
+	ModifyGraph mirror=2, minor=1
+	Label left "y position"
+	Label bottom "x position"
+	TextBox/C/N=title/F=0/A=MC "2p Orbital Electron Density"
+End
+
+// Creates an interactive double-slit interference pattern
+Function DoubleSlit()
+	// Create waves for interference pattern
+	Make/O/N=(200,200) interferencePattern
+	SetScale/I x, -10, 10, "", interferencePattern
+	SetScale/I y, -10, 10, "", interferencePattern
+	
+	// Initialize variables
+	Variable/G root:slitDistance = 2
+	Variable/G root:wavelength = 1
+	
+	// Calculate initial pattern
+	UpdateInterference()
+	
+	// Create display
+	Display/N=DoubleSlit/K=1
+	AppendImage interferencePattern
+	ModifyImage interferencePattern ctab= {*,*,Rainbow,0}
+	ModifyGraph mirror=2, minor=1
+	Label left "y position"
+	Label bottom "x position"
+	TextBox/C/N=title/F=0/A=MC "Double-Slit Interference"
+	
+	// Add controls
+	Slider slitSlider,pos={20,20},size={150,16},proc=SlitSliderProc
+	Slider slitSlider,limits={0.5,5,0.1},value=2,vert=0,ticks=20
+	Slider wavelengthSlider,pos={20,50},size={150,16},proc=WavelengthSliderProc
+	Slider wavelengthSlider,limits={0.1,2,0.1},value=1,vert=0,ticks=20
+End
+
+Function UpdateInterference()
+	NVAR slitDistance = root:slitDistance
+	NVAR wavelength = root:wavelength
+	Wave interferencePattern
+	
+	Variable i, j
+	for(i=0; i<200; i+=1)
+		for(j=0; j<200; j+=1)
+			Variable x = DimOffset(interferencePattern,0) + i*DimDelta(interferencePattern,0)
+			Variable y = DimOffset(interferencePattern,1) + j*DimDelta(interferencePattern,1)
+			
+			// Calculate distances from slits
+			Variable r1 = sqrt(x^2 + (y-slitDistance)^2)
+			Variable r2 = sqrt(x^2 + (y+slitDistance)^2)
+			
+			// Calculate interference
+			interferencePattern[i][j] = (1 + cos(2*pi*(r1-r2)/wavelength))/2
+		endfor
+	endfor
+End
+
+Function SlitSliderProc(sa) : SliderControl
+	STRUCT WMSliderAction &sa
+	
+	switch(sa.eventCode)
+		case 2: // Mouse up
+			NVAR slitDistance = root:slitDistance
+			slitDistance = sa.curval  // Fixed: Changed from sa.value to sa.curval
+			UpdateInterference()
+			break
+	endswitch
+	return 0
+End
+
+Function WavelengthSliderProc(sa) : SliderControl
+	STRUCT WMSliderAction &sa
+	
+	switch(sa.eventCode)
+		case 2: // Mouse up
+			NVAR wavelength = root:wavelength
+			wavelength = sa.curval  // Fixed: Changed from sa.value to sa.curval
+			UpdateInterference()
+			break
+	endswitch
+	return 0
+End
+
+// Run all visualizations
+Function RunVisualizations()
+	WaveAnimation()
+	QuantumWellVisualization()
+	ElectronDensityPlot()
+	DoubleSlit()
+End
+
+
+
+
+
+
